@@ -118,7 +118,7 @@ function useLayoutMetrics(viewport: { width: number; height: number }): LayoutMe
     const isCompact = vw < 8;
 
     // Base spatial unit tied to viewport height – keeps every gap proportional
-    const baseUnit = vh * 0.14;
+    const baseUnit = vh * 0.205;
 
     return {
       spacing: {
@@ -127,7 +127,7 @@ function useLayoutMetrics(viewport: { width: number; height: number }): LayoutMe
         z: -0.05,
       },
       cardHeightRatio: 0.42,
-      hoverPullout: isCompact ? 0 : baseUnit * 0.83,
+      hoverPullout: isCompact ? 0 : baseUnit * 0.75,
       timelineOffsetY: -(vh * 0.074),
       timelineDotRadius: vh * 0.0028,
       timelineLabelOffsetY: -(vh * 0.014),
