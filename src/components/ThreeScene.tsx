@@ -3,7 +3,7 @@
 import { useRef, useState, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame, useThree, ThreeEvent } from "@react-three/fiber";
-import { useTexture, Html, useScroll } from "@react-three/drei";
+import { useTexture, Html, useScroll, Text } from "@react-three/drei";
 import { type GalleryEntry } from "@/lib/content-types";
 
 const skewVertexShader = `
@@ -73,6 +73,29 @@ const SkewCardMaterial = {
   `
 };
 
+// Timeline line shader – fades alpha toward viewport edges so only
+// the portion near the screen center is visible.
+const timelineLineVert = `
+  varying vec3 vWorldPos;
+  void main() {
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vWorldPos = wp.xyz;
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`;
+
+const timelineLineFrag = `
+  uniform vec3 uColor;
+  uniform float uOpacity;
+  uniform float uFadeRange;
+  varying vec3 vWorldPos;
+  void main() {
+    float d = abs(vWorldPos.x);
+    float fade = 1.0 - smoothstep(uFadeRange * 0.4, uFadeRange, d);
+    gl_FragColor = vec4(uColor, uOpacity * fade);
+  }
+`;
+
 function createQuadGeometry(
   a: [number, number, number],
   b: [number, number, number],
@@ -128,10 +151,10 @@ function useLayoutMetrics(viewport: { width: number; height: number }): LayoutMe
       },
       cardHeightRatio: 0.42,
       hoverPullout: isCompact ? 0 : baseUnit * 0.75,
-      timelineOffsetY: -(vh * 0.074),
-      timelineDotRadius: vh * 0.0028,
-      timelineLabelOffsetY: -(vh * 0.014),
-      timelineLineRadius: vh * 0.00046,
+      timelineOffsetY: vh * 0.37,
+      timelineDotRadius: vh * 0.004,
+      timelineLabelOffsetY: vh * 0.02,
+      timelineLineRadius: vh * 0.001,
       hoverTextOffsetPx: Math.max(10, Math.min(20, vw * 1.5)),
       isCompact,
       timelineLabelStep: isCompact ? 2 : 1,
@@ -382,16 +405,27 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
   const totalTravelY = totalCards * Math.abs(metrics.spacing.y);
 
   const isLifeChannel = entries.length > 0 && entries.every(e => e.channel === "life");
-  
+
+  const timelineLineMat = useMemo(() => new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: {
+      uColor: { value: new THREE.Color("#111") },
+      uOpacity: { value: 0.7 },
+      uFadeRange: { value: viewport.width / 2 },
+    },
+    vertexShader: timelineLineVert,
+    fragmentShader: timelineLineFrag,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []);
+
   const timelineNodes = useMemo(() => {
     if (!isLifeChannel) return [];
     
     const nodes: { month: string; position: [number, number, number] }[] = [];
     let lastMonth = "";
     
-    const reversedEntries = [...entries].reverse();
-    
-    reversedEntries.forEach((entry, index) => {
+    entries.forEach((entry, index) => {
       if (entry.timelineMonth && entry.timelineMonth !== lastMonth) {
         nodes.push({
           month: entry.timelineMonth.replace("-", "."),
@@ -407,21 +441,31 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
     return nodes;
   }, [entries, isLifeChannel, metrics.spacing]);
 
-  useFrame(() => {
+  useFrame((state) => {
     if (!groupRef.current) return;
     
     const progress = scroll.offset;
     
     groupRef.current.position.x = -progress * totalTravelX;
     groupRef.current.position.y = -progress * totalTravelY;
+
+    timelineLineMat.uniforms.uFadeRange.value = state.viewport.width / 2;
   });
 
   const tlOffY = metrics.timelineOffsetY;
-  const lineStart: [number, number, number] = [0, tlOffY, 0];
+  const pad = metrics.spacing.x;
+  const slope = metrics.spacing.y / metrics.spacing.x;
+  const lineStart: [number, number, number] = [
+    -pad,
+    tlOffY - pad * slope,
+    0
+  ];
+  const lastNode = timelineNodes[timelineNodes.length - 1];
+  const lineEndX = lastNode ? lastNode.position[0] : 0;
   const lineEnd: [number, number, number] = [
-    (totalCards - 1) * metrics.spacing.x,
-    (totalCards - 1) * metrics.spacing.y + tlOffY,
-    (totalCards - 1) * metrics.spacing.z
+    lineEndX,
+    lineEndX * slope + tlOffY,
+    lastNode ? lastNode.position[2] : 0
   ];
 
   const visibleTimelineNodes = metrics.timelineLabelStep > 1
@@ -446,7 +490,7 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
 
       {isLifeChannel && timelineNodes.length > 0 && (
         <group position={[0, 0, -0.1]}>
-          <mesh>
+          <mesh material={timelineLineMat}>
             <tubeGeometry args={[
               new THREE.LineCurve3(
                 new THREE.Vector3(...lineStart),
@@ -457,25 +501,25 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
               8,
               false
             ]} />
-            <meshBasicMaterial color="#d0d0d0" transparent opacity={0.3} />
           </mesh>
 
           {visibleTimelineNodes.map((node, i) => (
             <group key={i} position={[node.position[0], node.position[1] + tlOffY, node.position[2]]}>
-              <mesh>
+              <mesh frustumCulled={false}>
                 <circleGeometry args={[metrics.timelineDotRadius, 32]} />
                 <meshBasicMaterial color="#111" />
               </mesh>
-              
-              <Html
-                position={[0, metrics.timelineLabelOffsetY, 0]}
-                center
-                style={{ pointerEvents: "none" }}
+              <Text
+                position={[0, metrics.timelineLabelOffsetY, 0.01]}
+                fontSize={viewport.height * 0.012}
+                color="#111"
+                anchorX="center"
+                anchorY="middle"
+                letterSpacing={0.15}
+                frustumCulled={false}
               >
-                <div className="text-[10px] font-medium tracking-widest text-[#111]/40 whitespace-nowrap">
-                  {node.month}
-                </div>
-              </Html>
+                {node.month}
+              </Text>
             </group>
           ))}
         </group>
