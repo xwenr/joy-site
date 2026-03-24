@@ -89,22 +89,63 @@ function createQuadGeometry(
   return geometry;
 }
 
+// ---------------------------------------------------------------------------
+// Responsive layout metrics – every spatial value derives from viewport so
+// card sizes, spacing, hover distances and timeline positions scale in
+// lockstep.  A "compact" breakpoint (narrow window) disables hover-pullout
+// and thins out timeline labels to prevent overlap.
+// ---------------------------------------------------------------------------
+
+interface LayoutMetrics {
+  spacing: { x: number; y: number; z: number };
+  cardHeightRatio: number;
+  hoverPullout: number;
+  timelineOffsetY: number;
+  timelineDotRadius: number;
+  timelineLabelOffsetY: number;
+  timelineLineRadius: number;
+  hoverTextOffsetPx: number;
+  isCompact: boolean;
+  timelineLabelStep: number;
+}
+
+function useLayoutMetrics(viewport: { width: number; height: number }): LayoutMetrics {
+  return useMemo(() => {
+    const vw = viewport.width;
+    const vh = viewport.height;
+
+    // ~800 px at camera zoom 100
+    const isCompact = vw < 8;
+
+    // Base spatial unit tied to viewport height – keeps every gap proportional
+    const baseUnit = vh * 0.14;
+
+    return {
+      spacing: {
+        x: baseUnit,
+        y: baseUnit * 0.3,
+        z: -0.05,
+      },
+      cardHeightRatio: 0.42,
+      hoverPullout: isCompact ? 0 : baseUnit * 0.83,
+      timelineOffsetY: -(vh * 0.074),
+      timelineDotRadius: vh * 0.0028,
+      timelineLabelOffsetY: -(vh * 0.014),
+      timelineLineRadius: vh * 0.00046,
+      hoverTextOffsetPx: Math.max(10, Math.min(20, vw * 1.5)),
+      isCompact,
+      timelineLabelStep: isCompact ? 2 : 1,
+    };
+  }, [viewport.width, viewport.height]);
+}
+
 interface GlassCardProps {
   entry: GalleryEntry;
   index: number;
   total: number;
   onSelect: (entry: GalleryEntry) => void;
+  metrics: LayoutMetrics;
 }
-
-// Configuration based on PRD
-const CONFIG = {
-  spacing: {
-    x: 1.5,   // Adjusted from 1.8 to 1.5 per user request
-    y: 0.45,  
-    z: -0.05,
-  },
-  hoverPullout: 0.5,
-};
 
 function hasImageDimensions(
   image: unknown,
@@ -119,16 +160,15 @@ function hasImageDimensions(
   );
 }
 
-export function GlassCard({ entry, index, total, onSelect }: GlassCardProps) {
+export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardProps) {
   const groupRef = useRef<THREE.Group>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const topFaceMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const rightFaceMatRef = useRef<THREE.MeshBasicMaterial>(null);
   
-  // State for hover tracking
   const [hovered, setHovered] = useState(false);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 }); // Local mouse position for the text
-  const [targetMousePos, setTargetMousePos] = useState({ x: 0, y: 0 }); // Target for smooth damping
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [targetMousePos, setTargetMousePos] = useState({ x: 0, y: 0 });
 
   const { viewport } = useThree();
   
@@ -136,16 +176,15 @@ export function GlassCard({ entry, index, total, onSelect }: GlassCardProps) {
   texture.colorSpace = THREE.SRGBColorSpace;
   const textureImage = texture.image;
   
-  const baseX = index * CONFIG.spacing.x;
-  const baseY = index * CONFIG.spacing.y;
-  const baseZ = index * CONFIG.spacing.z;
+  const baseX = index * metrics.spacing.x;
+  const baseY = index * metrics.spacing.y;
+  const baseZ = index * metrics.spacing.z;
 
   const imageAspect = hasImageDimensions(textureImage)
     ? textureImage.width / textureImage.height
     : 4 / 3;
 
-  // Responsive Dimensions based on original image aspect ratio
-  const height = viewport.height * 0.42;
+  const height = viewport.height * metrics.cardHeightRatio;
   const width = height * imageAspect;
   const skewY = -0.2;
 
@@ -204,8 +243,7 @@ export function GlassCard({ entry, index, total, onSelect }: GlassCardProps) {
   useFrame((state, delta) => {
     if (!groupRef.current || !materialRef.current) return;
 
-    // Hover Interaction: Pull out horizontally
-    const targetX = baseX + (hovered ? 1.25 : 0);
+    const targetX = baseX + (hovered ? metrics.hoverPullout : 0);
     groupRef.current.position.x = THREE.MathUtils.damp(
       groupRef.current.position.x,
       targetX,
@@ -305,26 +343,25 @@ export function GlassCard({ entry, index, total, onSelect }: GlassCardProps) {
           depthWrite={false}
         />
 
-        {/* Floating HTML Overlay for Title - Follows Mouse */}
         {hovered && (
           <Html
-            // Position it exactly at the mouse cursor local position
             position={[mousePos.x, mousePos.y, 0.01]} 
             center
             style={{
               pointerEvents: "none",
-              zIndex: 100, // Ensure it's above the canvas
+              zIndex: 100,
             }}
           >
             <div 
-              // mix-blend-difference makes it automatically invert color based on background
               className="whitespace-nowrap px-4 py-2 pointer-events-none mix-blend-difference"
               style={{
-                transform: 'translate(20px, -20px)', // Offset from the actual cursor tip
+                transform: `translate(${metrics.hoverTextOffsetPx}px, -${metrics.hoverTextOffsetPx}px)`,
               }}
             >
               <h3 className="text-[11px] font-bold tracking-[0.25em] uppercase text-white drop-shadow-[0_0_2px_rgba(255,255,255,0.5)]">
-                {entry.title}
+                {entry.channel === "archive" && entry.archiveType
+                  ? `${entry.archiveType} — ${entry.title}`
+                  : `${entry.date.replace(/-/g, ".")} — ${entry.title}`}
               </h3>
             </div>
           </Html>
@@ -338,23 +375,58 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
   const scroll = useScroll();
   const groupRef = useRef<THREE.Group>(null);
   const { viewport } = useThree();
+  const metrics = useLayoutMetrics(viewport);
 
   const totalCards = entries.length;
-  const totalTravelX = totalCards * CONFIG.spacing.x;
-  const totalTravelY = totalCards * Math.abs(CONFIG.spacing.y);
+  const totalTravelX = totalCards * metrics.spacing.x;
+  const totalTravelY = totalCards * Math.abs(metrics.spacing.y);
+
+  const isLifeChannel = entries.length > 0 && entries.every(e => e.channel === "life");
+  
+  const timelineNodes = useMemo(() => {
+    if (!isLifeChannel) return [];
+    
+    const nodes: { month: string; position: [number, number, number] }[] = [];
+    let lastMonth = "";
+    
+    const reversedEntries = [...entries].reverse();
+    
+    reversedEntries.forEach((entry, index) => {
+      if (entry.timelineMonth && entry.timelineMonth !== lastMonth) {
+        nodes.push({
+          month: entry.timelineMonth.replace("-", "."),
+          position: [
+            index * metrics.spacing.x,
+            index * metrics.spacing.y,
+            index * metrics.spacing.z
+          ]
+        });
+        lastMonth = entry.timelineMonth;
+      }
+    });
+    return nodes;
+  }, [entries, isLifeChannel, metrics.spacing]);
 
   useFrame(() => {
     if (!groupRef.current) return;
     
     const progress = scroll.offset;
     
-    // Move left and down as we scroll
-    const targetX = -progress * totalTravelX * 1.0; // Adjusted multiplier for wider spacing
-    const targetY = -progress * totalTravelY * 1.0; 
-    
-    groupRef.current.position.x = targetX;
-    groupRef.current.position.y = targetY;
+    groupRef.current.position.x = -progress * totalTravelX;
+    groupRef.current.position.y = -progress * totalTravelY;
   });
+
+  const tlOffY = metrics.timelineOffsetY;
+  const lineStart: [number, number, number] = [0, tlOffY, 0];
+  const lineEnd: [number, number, number] = [
+    (totalCards - 1) * metrics.spacing.x,
+    (totalCards - 1) * metrics.spacing.y + tlOffY,
+    (totalCards - 1) * metrics.spacing.z
+  ];
+
+  const visibleTimelineNodes = metrics.timelineLabelStep > 1
+    ? timelineNodes.filter((_, i) => i % metrics.timelineLabelStep === 0)
+    : timelineNodes;
 
   return (
     <group 
@@ -368,8 +440,46 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
           index={index}
           total={totalCards}
           onSelect={onSelect}
+          metrics={metrics}
         />
       )).reverse()}
+
+      {isLifeChannel && timelineNodes.length > 0 && (
+        <group position={[0, 0, -0.1]}>
+          <mesh>
+            <tubeGeometry args={[
+              new THREE.LineCurve3(
+                new THREE.Vector3(...lineStart),
+                new THREE.Vector3(...lineEnd)
+              ),
+              64,
+              metrics.timelineLineRadius,
+              8,
+              false
+            ]} />
+            <meshBasicMaterial color="#d0d0d0" transparent opacity={0.3} />
+          </mesh>
+
+          {visibleTimelineNodes.map((node, i) => (
+            <group key={i} position={[node.position[0], node.position[1] + tlOffY, node.position[2]]}>
+              <mesh>
+                <circleGeometry args={[metrics.timelineDotRadius, 32]} />
+                <meshBasicMaterial color="#111" />
+              </mesh>
+              
+              <Html
+                position={[0, metrics.timelineLabelOffsetY, 0]}
+                center
+                style={{ pointerEvents: "none" }}
+              >
+                <div className="text-[10px] font-medium tracking-widest text-[#111]/40 whitespace-nowrap">
+                  {node.month}
+                </div>
+              </Html>
+            </group>
+          ))}
+        </group>
+      )}
     </group>
   );
 }

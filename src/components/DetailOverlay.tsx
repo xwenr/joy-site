@@ -37,16 +37,18 @@ export default function DetailOverlay({ entry, onClose }: DetailOverlayProps) {
         <div className="w-full md:w-1/2 min-h-screen flex flex-col justify-center px-8 md:px-20 py-20 bg-bg">
           <div className="max-w-xl">
             <motion.p
-              className="text-xs tracking-widest uppercase text-muted mb-8"
+              className="text-[11px] tracking-[0.2em] uppercase text-muted mb-8"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4, duration: 0.8 }}
             >
-              {entry.date}
+              {entry.channel === "archive" && entry.archiveType
+                ? `${entry.archiveType} — ${entry.date.replace(/-/g, ".")}`
+                : entry.date.replace(/-/g, ".")}
             </motion.p>
 
             <motion.h1
-              className="text-4xl md:text-5xl font-light tracking-tight mb-12 text-fg"
+              className="text-3xl md:text-4xl font-normal tracking-wide mb-12 text-fg"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.5, duration: 0.8 }}
@@ -54,7 +56,7 @@ export default function DetailOverlay({ entry, onClose }: DetailOverlayProps) {
               {entry.title}
             </motion.h1>
 
-            <div className="space-y-6 text-sm md:text-base leading-relaxed text-fg/80 font-light">
+            <div className="space-y-8 text-[13px] md:text-[15px] leading-[2.2] text-fg/70 font-light tracking-wide">
               {paragraphs.map((p, i) => (
                 <motion.p
                   key={i}
