@@ -24,6 +24,17 @@ function useThemeColor(cssVar: string, fallback: string) {
   return color;
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState<boolean | null>(null);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isMobile;
+}
+
 interface HomeClientProps {
   entries: GalleryEntry[];
 }
@@ -32,6 +43,7 @@ export default function HomeClient({ entries }: HomeClientProps) {
   const [selected, setSelected] = useState<GalleryEntry | null>(null);
   const [activeFilter, setActiveFilter] = useState<"all" | "life" | "archive">("all");
   const [showLoader, setShowLoader] = useState(false);
+  const isMobile = useIsMobile();
 
   const bgColor = useThemeColor("--color-bg-canvas", "#f4f4f0");
 
@@ -99,7 +111,7 @@ export default function HomeClient({ entries }: HomeClientProps) {
             </p>
           </div>
         </div>
-      ) : (
+      ) : isMobile === null ? null : (
         <div className="absolute inset-0 z-0">
           <Canvas
             orthographic
@@ -108,8 +120,9 @@ export default function HomeClient({ entries }: HomeClientProps) {
               position: [0, 0, 10],
             }}
             gl={{
-              antialias: true,
+              antialias: !isMobile,
               alpha: false,
+              powerPreference: isMobile ? "high-performance" : "default",
             }}
             style={{ pointerEvents: "auto" }}
           >
@@ -117,9 +130,10 @@ export default function HomeClient({ entries }: HomeClientProps) {
 
             <Suspense fallback={null}>
               <ScrollControls
-                pages={Math.max(filteredEntries.length * 0.4, 1)}
-                damping={0.12}
+                pages={Math.max(filteredEntries.length * (isMobile ? 0.8 : 0.4), 1)}
+                damping={isMobile ? 0.35 : 0.12}
                 distance={1}
+                horizontal={isMobile}
               >
                 <SceneContent entries={filteredEntries} onSelect={setSelected} />
               </ScrollControls>

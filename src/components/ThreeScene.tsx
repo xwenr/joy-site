@@ -370,7 +370,7 @@ export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardP
           }
         }}
       >
-        <planeGeometry args={[width, height, 32, 32]} />
+        <planeGeometry args={[width, height, metrics.isMobile ? 1 : 32, metrics.isMobile ? 1 : 32]} />
         
         <shaderMaterial
           ref={materialRef}
@@ -443,6 +443,7 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
   const totalCards = entries.length;
   const totalTravelX = totalCards * metrics.spacing.x;
   const totalTravelY = totalCards * Math.abs(metrics.spacing.y);
+  const [mobileVisibleRange, setMobileVisibleRange] = useState<[number, number]>([0, Math.min(totalCards, 10)]);
 
   const isLifeChannel = entries.length > 0 && entries.every(e => e.channel === "life");
 
@@ -492,6 +493,14 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
     groupRef.current.position.y = metrics.startOffsetY - progress * totalTravelY;
 
     timelineLineMat.uniforms.uFadeRange.value = state.viewport.width / 2;
+
+    if (metrics.isMobile) {
+      const centerIdx = Math.round(progress * (totalCards - 1));
+      const buffer = 5;
+      const newStart = Math.max(0, centerIdx - buffer);
+      const newEnd = Math.min(totalCards, centerIdx + buffer + 1);
+      setMobileVisibleRange(prev => (prev[0] === newStart && prev[1] === newEnd) ? prev : [newStart, newEnd]);
+    }
   });
 
   const tlOffY = metrics.timelineOffsetY;
@@ -519,16 +528,19 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
       ref={groupRef}
       position={[0, 0, 0]} 
     >
-      {entries.map((entry, index) => (
-        <GlassCard
-          key={`${entry.id}-${index}`}
-          entry={entry}
-          index={index}
-          total={totalCards}
-          onSelect={onSelect}
-          metrics={metrics}
-        />
-      )).reverse()}
+      {entries.map((entry, index) => {
+        if (metrics.isMobile && (index < mobileVisibleRange[0] || index >= mobileVisibleRange[1])) return null;
+        return (
+          <GlassCard
+            key={`${entry.id}-${index}`}
+            entry={entry}
+            index={index}
+            total={totalCards}
+            onSelect={onSelect}
+            metrics={metrics}
+          />
+        );
+      }).reverse()}
 
       {isLifeChannel && timelineNodes.length > 0 && (
         <group position={[0, 0, -0.1]}>
@@ -538,9 +550,9 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
                 new THREE.Vector3(...lineStart),
                 new THREE.Vector3(...lineEnd)
               ),
-              64,
+              metrics.isMobile ? 16 : 64,
               metrics.timelineLineRadius,
-              8,
+              metrics.isMobile ? 4 : 8,
               false
             ]} />
           </mesh>
@@ -548,7 +560,7 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
           {visibleTimelineNodes.map((node, i) => (
             <group key={i} position={[node.position[0], node.position[1] + tlOffY, node.position[2]]}>
               <mesh frustumCulled={false}>
-                <circleGeometry args={[metrics.timelineDotRadius, 32]} />
+                <circleGeometry args={[metrics.timelineDotRadius, metrics.isMobile ? 12 : 32]} />
                 <meshBasicMaterial color={tlColor} />
               </mesh>
               <Text
