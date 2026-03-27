@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense, useEffect, useMemo, useCallback } from "react";
+import { useState, Suspense, useEffect, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { ScrollControls } from "@react-three/drei";
 import { AnimatePresence } from "framer-motion";
@@ -35,13 +35,6 @@ export default function HomeClient({ entries }: HomeClientProps) {
 
   const bgColor = useThemeColor("--color-bg-canvas", "#f4f4f0");
 
-  const getScrollPages = useCallback((count: number) => {
-    if (typeof window === "undefined") return Math.max(count * 0.4, 1);
-    const isMobile = window.innerWidth < 640;
-    const factor = isMobile ? 0.5 : 0.4;
-    return Math.max(count * factor, 1);
-  }, []);
-
   useEffect(() => {
     if (entries.length === 0) {
       setShowLoader(false);
@@ -63,17 +56,17 @@ export default function HomeClient({ entries }: HomeClientProps) {
 
   return (
     <main className="fixed inset-0 w-full h-full bg-bg overflow-hidden font-sans">
-      <div className="absolute top-0 left-0 w-full px-5 py-5 md:p-8 z-10 pointer-events-none flex justify-between items-start mix-blend-difference text-white">
-        <h1 className="text-base md:text-xl font-medium tracking-widest uppercase">
+      <div className="absolute top-0 left-0 w-full px-5 pt-3 md:p-8 z-10 pointer-events-none flex justify-between items-center mix-blend-difference text-white md:items-start">
+        <h1 className="text-[12px] md:text-xl font-medium tracking-[0.2em] uppercase">
           JOY&apos;S GALLERY
         </h1>
-        <p className="text-[10px] md:text-xs tracking-widest uppercase opacity-60 hidden sm:block">
+        <p className="text-[10px] md:text-xs tracking-widest uppercase opacity-60 hidden md:block">
           Scroll to explore
         </p>
       </div>
 
-      <div className="absolute top-5 md:top-8 left-1/2 -translate-x-1/2 z-20 pointer-events-auto mix-blend-difference text-white">
-        <nav className="flex items-center gap-6 md:gap-12 text-[11px] tracking-[0.2em] uppercase font-medium">
+      <div className="absolute top-8 md:top-8 left-5 md:left-1/2 md:-translate-x-1/2 z-20 pointer-events-auto mix-blend-difference text-white">
+        <nav className="flex items-center gap-5 md:gap-12 text-[10px] md:text-[11px] tracking-[0.15em] md:tracking-[0.2em] uppercase font-medium">
           {(["all", "life", "archive"] as const).map((filter) => (
             <button
               key={filter}
@@ -124,8 +117,8 @@ export default function HomeClient({ entries }: HomeClientProps) {
 
             <Suspense fallback={null}>
               <ScrollControls
-                pages={getScrollPages(filteredEntries.length)}
-                damping={0.1}
+                pages={Math.max(filteredEntries.length * 0.4, 1)}
+                damping={0.12}
                 distance={1}
               >
                 <SceneContent entries={filteredEntries} onSelect={setSelected} />

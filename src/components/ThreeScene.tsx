@@ -116,6 +116,7 @@ interface LayoutMetrics {
   spacing: { x: number; y: number; z: number };
   cardHeightRatio: number;
   hoverPullout: number;
+  startOffsetY: number;
   timelineOffsetY: number;
   timelineDotRadius: number;
   timelineLabelOffsetY: number;
@@ -139,11 +140,12 @@ function useLayoutMetrics(viewport: { width: number; height: number }): LayoutMe
     return {
       spacing: {
         x: baseUnit * (isMobile ? 0.85 : 1),
-        y: baseUnit * (isMobile ? 0.25 : 0.3),
+        y: baseUnit * (isMobile ? 0.08 : 0.3),
         z: -0.05,
       },
       cardHeightRatio: isMobile ? 0.34 : 0.42,
       hoverPullout: isCompact ? 0 : baseUnit * 0.75,
+      startOffsetY: isMobile ? -vh * 0.12 : 0,
       timelineOffsetY: vh * (isMobile ? 0.42 : 0.37),
       timelineDotRadius: vh * 0.004,
       timelineLabelOffsetY: vh * 0.02,
@@ -487,7 +489,7 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
     const progress = scroll.offset;
     
     groupRef.current.position.x = -progress * totalTravelX;
-    groupRef.current.position.y = -progress * totalTravelY;
+    groupRef.current.position.y = metrics.startOffsetY - progress * totalTravelY;
 
     timelineLineMat.uniforms.uFadeRange.value = state.viewport.width / 2;
   });
