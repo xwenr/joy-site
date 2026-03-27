@@ -436,9 +436,13 @@ function useIsDarkMode() {
 export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], onSelect: (e: GalleryEntry) => void }) {
   const scroll = useScroll();
   const groupRef = useRef<THREE.Group>(null);
-  const { viewport } = useThree();
+  const { viewport, size } = useThree();
   const metrics = useLayoutMetrics(viewport);
   const isDark = useIsDarkMode();
+
+  const mobileProgressRef = useRef(0);
+  const mobileVelocityRef = useRef(0);
+  const mobileDraggingRef = useRef(false);
 
   const totalCards = entries.length;
   const totalTravelX = totalCards * metrics.spacing.x;
@@ -484,11 +488,80 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
     return nodes;
   }, [entries, isLifeChannel, metrics.spacing]);
 
-  useFrame((state) => {
+  // Mobile: bypass ScrollControls native scroll, use direct touch control
+  useEffect(() => {
+    if (!metrics.isMobile || !scroll.el) return;
+
+    const scrollEl = scroll.el;
+    const prevTouch = scrollEl.style.touchAction;
+    const prevOverflow = scrollEl.style.overflow;
+    scrollEl.style.touchAction = "none";
+    scrollEl.style.overflow = "hidden";
+
+    let startX = 0;
+    let lastX = 0;
+    let lastTime = 0;
+    let startProgress = 0;
+    const swipeScale = () => size.width * Math.max(totalCards, 1) * 0.25;
+
+    const onStart = (e: TouchEvent) => {
+      mobileDraggingRef.current = true;
+      mobileVelocityRef.current = 0;
+      startX = e.touches[0].clientX;
+      lastX = startX;
+      lastTime = performance.now();
+      startProgress = mobileProgressRef.current;
+    };
+
+    const onMove = (e: TouchEvent) => {
+      if (!mobileDraggingRef.current) return;
+      e.preventDefault();
+      const x = e.touches[0].clientX;
+      const now = performance.now();
+      const dt = now - lastTime;
+      if (dt > 5) {
+        mobileVelocityRef.current = (x - lastX) / dt;
+        lastX = x;
+        lastTime = now;
+      }
+      // Left swipe (dx < 0) → progress increases → show next cards
+      mobileProgressRef.current = Math.max(0, Math.min(1, startProgress - (x - startX) / swipeScale()));
+    };
+
+    const onEnd = () => { mobileDraggingRef.current = false; };
+
+    scrollEl.addEventListener("touchstart", onStart, { passive: false });
+    scrollEl.addEventListener("touchmove", onMove, { passive: false });
+    scrollEl.addEventListener("touchend", onEnd);
+    scrollEl.addEventListener("touchcancel", onEnd);
+    return () => {
+      scrollEl.removeEventListener("touchstart", onStart);
+      scrollEl.removeEventListener("touchmove", onMove);
+      scrollEl.removeEventListener("touchend", onEnd);
+      scrollEl.removeEventListener("touchcancel", onEnd);
+      scrollEl.style.touchAction = prevTouch;
+      scrollEl.style.overflow = prevOverflow;
+    };
+  }, [metrics.isMobile, scroll.el, size.width, totalCards]);
+
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
-    
-    const progress = scroll.offset;
-    
+
+    let progress: number;
+    if (metrics.isMobile) {
+      // Apply momentum after finger lifts
+      if (!mobileDraggingRef.current && Math.abs(mobileVelocityRef.current) > 0.001) {
+        const sw = size.width * Math.max(totalCards, 1) * 0.25;
+        mobileProgressRef.current = Math.max(0, Math.min(1,
+          mobileProgressRef.current - (mobileVelocityRef.current * delta * 1000) / sw
+        ));
+        mobileVelocityRef.current *= Math.exp(-3 * delta);
+      }
+      progress = mobileProgressRef.current;
+    } else {
+      progress = scroll.offset;
+    }
+
     groupRef.current.position.x = -progress * totalTravelX;
     groupRef.current.position.y = metrics.startOffsetY - progress * totalTravelY;
 

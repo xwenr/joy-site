@@ -130,10 +130,9 @@ export default function HomeClient({ entries }: HomeClientProps) {
 
             <Suspense fallback={null}>
               <ScrollControls
-                pages={Math.max(filteredEntries.length * (isMobile ? 0.8 : 0.4), 1)}
-                damping={isMobile ? 0.35 : 0.12}
+                pages={Math.max(filteredEntries.length * 0.4, 1)}
+                damping={0.12}
                 distance={1}
-                horizontal={isMobile}
               >
                 <SceneContent entries={filteredEntries} onSelect={setSelected} />
               </ScrollControls>
