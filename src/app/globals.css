@@ -4,7 +4,21 @@
   --color-bg: #f4f4f0;
   --color-fg: #1a1a1a;
   --color-muted: #888888;
+  --color-bg-canvas: #f4f4f0;
+  --color-overlay-close-bg: #1a1a1a;
+  --color-overlay-close-fg: #f4f4f0;
   --font-sans: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #131315;
+    --color-fg: #e4e4e0;
+    --color-muted: #777777;
+    --color-bg-canvas: #131315;
+    --color-overlay-close-bg: #e4e4e0;
+    --color-overlay-close-fg: #131315;
+  }
 }
 
 body {
@@ -16,9 +30,12 @@ body {
   overflow-x: hidden;
 }
 
-/* Hide scrollbar for clean look */
 ::-webkit-scrollbar {
   display: none;
+}
+
+html {
+  scrollbar-width: none;
 }
 
 /* Lenis recommended styles */
@@ -40,4 +57,24 @@ html.lenis, html.lenis body {
 
 .lenis.lenis-smooth iframe {
   pointer-events: none;
+}
+
+.safe-area-pad {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  body {
+    -webkit-tap-highlight-color: transparent;
+  }
 }

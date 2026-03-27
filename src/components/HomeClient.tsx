@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense, useEffect, useMemo } from "react";
+import { useState, Suspense, useEffect, useMemo, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
 import { ScrollControls } from "@react-three/drei";
 import { AnimatePresence } from "framer-motion";
@@ -8,6 +8,21 @@ import DetailOverlay from "@/components/DetailOverlay";
 import { SceneContent } from "@/components/ThreeScene";
 import type { GalleryEntry } from "@/lib/content-types";
 import { motion } from "framer-motion";
+
+function useThemeColor(cssVar: string, fallback: string) {
+  const [color, setColor] = useState(fallback);
+  useEffect(() => {
+    const update = () => {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
+      if (v) setColor(v);
+    };
+    update();
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, [cssVar]);
+  return color;
+}
 
 interface HomeClientProps {
   entries: GalleryEntry[];
@@ -17,6 +32,15 @@ export default function HomeClient({ entries }: HomeClientProps) {
   const [selected, setSelected] = useState<GalleryEntry | null>(null);
   const [activeFilter, setActiveFilter] = useState<"all" | "life" | "archive">("all");
   const [showLoader, setShowLoader] = useState(false);
+
+  const bgColor = useThemeColor("--color-bg-canvas", "#f4f4f0");
+
+  const getScrollPages = useCallback((count: number) => {
+    if (typeof window === "undefined") return Math.max(count * 0.4, 1);
+    const isMobile = window.innerWidth < 640;
+    const factor = isMobile ? 0.5 : 0.4;
+    return Math.max(count * factor, 1);
+  }, []);
 
   useEffect(() => {
     if (entries.length === 0) {
@@ -38,54 +62,38 @@ export default function HomeClient({ entries }: HomeClientProps) {
   }, [entries, activeFilter]);
 
   return (
-    <main className="fixed inset-0 w-full h-full bg-[#f4f4f0] overflow-hidden font-sans">
-      <div className="absolute top-0 left-0 w-full p-8 z-10 pointer-events-none flex justify-between items-start mix-blend-difference text-white">
-        <h1 className="text-xl font-medium tracking-widest uppercase">
+    <main className="fixed inset-0 w-full h-full bg-bg overflow-hidden font-sans">
+      <div className="absolute top-0 left-0 w-full px-5 py-5 md:p-8 z-10 pointer-events-none flex justify-between items-start mix-blend-difference text-white">
+        <h1 className="text-base md:text-xl font-medium tracking-widest uppercase">
           JOY&apos;S GALLERY
         </h1>
-        <p className="text-xs tracking-widest uppercase opacity-60">
+        <p className="text-[10px] md:text-xs tracking-widest uppercase opacity-60 hidden sm:block">
           Scroll to explore
         </p>
       </div>
 
-      {/* 顶部极简导航栏 */}
-      <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 pointer-events-auto mix-blend-difference text-white">
-        <nav className="flex items-center gap-12 text-[11px] tracking-[0.2em] uppercase font-medium">
-          <button 
-            onClick={() => setActiveFilter("all")}
-            className={`transition-opacity duration-300 hover:opacity-100 relative ${activeFilter === "all" ? "opacity-100" : "opacity-40"}`}
-          >
-            Home
-            {activeFilter === "all" && (
-              <motion.div layoutId="nav-indicator" className="absolute -bottom-2 left-0 right-0 h-[1px] bg-white" />
-            )}
-          </button>
-          <button 
-            onClick={() => setActiveFilter("life")}
-            className={`transition-opacity duration-300 hover:opacity-100 relative ${activeFilter === "life" ? "opacity-100" : "opacity-40"}`}
-          >
-            Life
-            {activeFilter === "life" && (
-              <motion.div layoutId="nav-indicator" className="absolute -bottom-2 left-0 right-0 h-[1px] bg-white" />
-            )}
-          </button>
-          <button 
-            onClick={() => setActiveFilter("archive")}
-            className={`transition-opacity duration-300 hover:opacity-100 relative ${activeFilter === "archive" ? "opacity-100" : "opacity-40"}`}
-          >
-            Archive
-            {activeFilter === "archive" && (
-              <motion.div layoutId="nav-indicator" className="absolute -bottom-2 left-0 right-0 h-[1px] bg-white" />
-            )}
-          </button>
+      <div className="absolute top-5 md:top-8 left-1/2 -translate-x-1/2 z-20 pointer-events-auto mix-blend-difference text-white">
+        <nav className="flex items-center gap-6 md:gap-12 text-[11px] tracking-[0.2em] uppercase font-medium">
+          {(["all", "life", "archive"] as const).map((filter) => (
+            <button
+              key={filter}
+              onClick={() => setActiveFilter(filter)}
+              className={`transition-opacity duration-300 hover:opacity-100 relative py-2 ${activeFilter === filter ? "opacity-100" : "opacity-40"}`}
+            >
+              {filter === "all" ? "Home" : filter === "life" ? "Life" : "Archive"}
+              {activeFilter === filter && (
+                <motion.div layoutId="nav-indicator" className="absolute -bottom-0.5 left-0 right-0 h-[1px] bg-white" />
+              )}
+            </button>
+          ))}
         </nav>
       </div>
 
       {entries.length === 0 ? (
-        <div className="absolute inset-0 flex items-center justify-center px-8">
-          <div className="max-w-xl text-center text-[#111]">
-            <h2 className="text-2xl tracking-wide uppercase mb-4">No Entries Yet</h2>
-            <p className="text-sm leading-7 text-black/65">
+        <div className="absolute inset-0 flex items-center justify-center px-6 md:px-8">
+          <div className="max-w-xl text-center text-fg">
+            <h2 className="text-xl md:text-2xl tracking-wide uppercase mb-4">No Entries Yet</h2>
+            <p className="text-sm leading-7 text-fg/60">
               现在内容目录还是空的。你之后只需要把图片放进
               <code className="mx-1">public/images/...</code>
               ，再把 JSON 内容文件放进
@@ -112,11 +120,11 @@ export default function HomeClient({ entries }: HomeClientProps) {
             }}
             style={{ pointerEvents: "auto" }}
           >
-            <color attach="background" args={["#f4f4f0"]} />
+            <color attach="background" args={[bgColor]} />
 
             <Suspense fallback={null}>
               <ScrollControls
-                pages={Math.max(filteredEntries.length * 0.4, 1)}
+                pages={getScrollPages(filteredEntries.length)}
                 damping={0.1}
                 distance={1}
               >
@@ -134,10 +142,8 @@ export default function HomeClient({ entries }: HomeClientProps) {
       </AnimatePresence>
 
       {showLoader && (
-        <div
-          className="absolute inset-0 bg-[#f4f4f0] z-50 flex items-center justify-center transition-opacity duration-500 pointer-events-none"
-        >
-          <p className="text-xs tracking-widest uppercase animate-pulse text-[#111]">
+        <div className="absolute inset-0 bg-bg z-50 flex items-center justify-center transition-opacity duration-500 pointer-events-none">
+          <p className="text-xs tracking-widest uppercase animate-pulse text-fg">
             Loading Gallery...
           </p>
         </div>

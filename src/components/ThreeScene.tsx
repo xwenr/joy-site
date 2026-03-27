@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useMemo } from "react";
+import { useRef, useState, useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame, useThree, ThreeEvent } from "@react-three/fiber";
 import { useTexture, Html, useScroll, Text } from "@react-three/drei";
@@ -112,13 +112,6 @@ function createQuadGeometry(
   return geometry;
 }
 
-// ---------------------------------------------------------------------------
-// Responsive layout metrics – every spatial value derives from viewport so
-// card sizes, spacing, hover distances and timeline positions scale in
-// lockstep.  A "compact" breakpoint (narrow window) disables hover-pullout
-// and thins out timeline labels to prevent overlap.
-// ---------------------------------------------------------------------------
-
 interface LayoutMetrics {
   spacing: { x: number; y: number; z: number };
   cardHeightRatio: number;
@@ -129,6 +122,7 @@ interface LayoutMetrics {
   timelineLineRadius: number;
   hoverTextOffsetPx: number;
   isCompact: boolean;
+  isMobile: boolean;
   timelineLabelStep: number;
 }
 
@@ -137,27 +131,27 @@ function useLayoutMetrics(viewport: { width: number; height: number }): LayoutMe
     const vw = viewport.width;
     const vh = viewport.height;
 
-    // ~800 px at camera zoom 100
+    const isMobile = vw < 5;
     const isCompact = vw < 8;
 
-    // Base spatial unit tied to viewport height – keeps every gap proportional
-    const baseUnit = vh * 0.205;
+    const baseUnit = vh * (isMobile ? 0.26 : 0.205);
 
     return {
       spacing: {
-        x: baseUnit,
-        y: baseUnit * 0.3,
+        x: baseUnit * (isMobile ? 0.85 : 1),
+        y: baseUnit * (isMobile ? 0.25 : 0.3),
         z: -0.05,
       },
-      cardHeightRatio: 0.42,
+      cardHeightRatio: isMobile ? 0.34 : 0.42,
       hoverPullout: isCompact ? 0 : baseUnit * 0.75,
-      timelineOffsetY: vh * 0.37,
+      timelineOffsetY: vh * (isMobile ? 0.42 : 0.37),
       timelineDotRadius: vh * 0.004,
       timelineLabelOffsetY: vh * 0.02,
       timelineLineRadius: vh * 0.001,
       hoverTextOffsetPx: Math.max(10, Math.min(20, vw * 1.5)),
       isCompact,
-      timelineLabelStep: isCompact ? 2 : 1,
+      isMobile,
+      timelineLabelStep: isMobile ? 3 : isCompact ? 2 : 1,
     };
   }, [viewport.width, viewport.height]);
 }
@@ -190,10 +184,14 @@ export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardP
   const rightFaceMatRef = useRef<THREE.MeshBasicMaterial>(null);
   
   const [hovered, setHovered] = useState(false);
+  const [tapped, setTapped] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [targetMousePos, setTargetMousePos] = useState({ x: 0, y: 0 });
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { viewport } = useThree();
+
+  const active = hovered || tapped;
   
   const texture = useTexture(entry.image);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -253,20 +251,17 @@ export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardP
     };
   }, [width, height, skewY, thicknessOffsetX, thicknessOffsetY, thicknessOffsetZ]);
 
-  // Handle mouse movement over the mesh
   const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
-    // e.point is the world coordinate of the intersection
-    // We want the text to float near the mouse, but slightly offset
     setTargetMousePos({
-      x: e.point.x - baseX, // Convert world to local (relative to this card)
+      x: e.point.x - baseX,
       y: e.point.y - baseY,
     });
   };
 
-  useFrame((state, delta) => {
+  useFrame((_state, delta) => {
     if (!groupRef.current || !materialRef.current) return;
 
-    const targetX = baseX + (hovered ? metrics.hoverPullout : 0);
+    const targetX = baseX + (active ? metrics.hoverPullout : 0);
     groupRef.current.position.x = THREE.MathUtils.damp(
       groupRef.current.position.x,
       targetX,
@@ -274,10 +269,9 @@ export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardP
       delta
     );
 
-    // Animate shader uniform for hover
     materialRef.current.uniforms.uHover.value = THREE.MathUtils.damp(
       materialRef.current.uniforms.uHover.value,
-      hovered ? 1.0 : 0.0,
+      active ? 1.0 : 0.0,
       6,
       delta
     );
@@ -285,7 +279,7 @@ export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardP
     if (topFaceMatRef.current) {
       topFaceMatRef.current.opacity = THREE.MathUtils.damp(
         topFaceMatRef.current.opacity,
-        hovered ? 0.24 : 0.2,
+        active ? 0.24 : 0.2,
         6,
         delta
       );
@@ -294,20 +288,23 @@ export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardP
     if (rightFaceMatRef.current) {
       rightFaceMatRef.current.opacity = THREE.MathUtils.damp(
         rightFaceMatRef.current.opacity,
-        hovered ? 0.3 : 0.26,
+        active ? 0.3 : 0.26,
         6,
         delta
       );
     }
 
-    // Smoothly damp the mouse position for the floating text
-    if (hovered) {
+    if (active && !metrics.isMobile) {
       setMousePos({
         x: THREE.MathUtils.damp(mousePos.x, targetMousePos.x, 8, delta),
         y: THREE.MathUtils.damp(mousePos.y, targetMousePos.y, 8, delta),
       });
     }
   });
+
+  const labelText = entry.channel === "archive" && entry.archiveType
+    ? `${entry.archiveType} — ${entry.title}`
+    : `${entry.date.replace(/-/g, ".")} — ${entry.title}`;
 
   return (
     <group 
@@ -339,20 +336,36 @@ export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardP
       <mesh
         position={[0, 0, 0.01]}
         onPointerOver={(e) => {
+          if (metrics.isMobile) return;
           e.stopPropagation();
           setHovered(true);
           document.body.style.cursor = "pointer";
           handlePointerMove(e);
         }}
-        onPointerMove={handlePointerMove}
+        onPointerMove={(e) => {
+          if (metrics.isMobile) return;
+          handlePointerMove(e);
+        }}
         onPointerOut={(e) => {
+          if (metrics.isMobile) return;
           e.stopPropagation();
           setHovered(false);
           document.body.style.cursor = "auto";
         }}
         onClick={(e) => {
           e.stopPropagation();
-          onSelect(entry);
+          if (metrics.isMobile) {
+            if (tapped) {
+              if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+              setTapped(false);
+              onSelect(entry);
+            } else {
+              setTapped(true);
+              tapTimerRef.current = setTimeout(() => setTapped(false), 2500);
+            }
+          } else {
+            onSelect(entry);
+          }
         }}
       >
         <planeGeometry args={[width, height, 32, 32]} />
@@ -362,18 +375,15 @@ export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardP
           vertexShader={SkewCardMaterial.vertexShader}
           fragmentShader={SkewCardMaterial.fragmentShader}
           uniforms={uniforms}
-          transparent={true} // Enabled again, but alpha is controlled by edge mask
+          transparent={true}
           depthWrite={false}
         />
 
-        {hovered && (
+        {active && !metrics.isMobile && (
           <Html
             position={[mousePos.x, mousePos.y, 0.01]} 
             center
-            style={{
-              pointerEvents: "none",
-              zIndex: 100,
-            }}
+            style={{ pointerEvents: "none", zIndex: 100 }}
           >
             <div 
               className="whitespace-nowrap px-4 py-2 pointer-events-none mix-blend-difference"
@@ -382,10 +392,25 @@ export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardP
               }}
             >
               <h3 className="text-[11px] font-bold tracking-[0.25em] uppercase text-white drop-shadow-[0_0_2px_rgba(255,255,255,0.5)]">
-                {entry.channel === "archive" && entry.archiveType
-                  ? `${entry.archiveType} — ${entry.title}`
-                  : `${entry.date.replace(/-/g, ".")} — ${entry.title}`}
+                {labelText}
               </h3>
+            </div>
+          </Html>
+        )}
+
+        {tapped && metrics.isMobile && (
+          <Html
+            position={[0, -height / 2 - 0.15, 0.01]}
+            center
+            style={{ pointerEvents: "none", zIndex: 100 }}
+          >
+            <div className="whitespace-nowrap px-3 py-1.5 pointer-events-none">
+              <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-fg/80 text-center">
+                {labelText}
+              </p>
+              <p className="text-[9px] tracking-[0.15em] uppercase text-fg/40 text-center mt-0.5">
+                Tap again to open
+              </p>
             </div>
           </Html>
         )}
@@ -394,11 +419,24 @@ export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardP
   );
 }
 
+function useIsDarkMode() {
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    setDark(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setDark(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return dark;
+}
+
 export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], onSelect: (e: GalleryEntry) => void }) {
   const scroll = useScroll();
   const groupRef = useRef<THREE.Group>(null);
   const { viewport } = useThree();
   const metrics = useLayoutMetrics(viewport);
+  const isDark = useIsDarkMode();
 
   const totalCards = entries.length;
   const totalTravelX = totalCards * metrics.spacing.x;
@@ -406,18 +444,20 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
 
   const isLifeChannel = entries.length > 0 && entries.every(e => e.channel === "life");
 
+  const tlColor = isDark ? "#666" : "#111";
+
   const timelineLineMat = useMemo(() => new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     uniforms: {
-      uColor: { value: new THREE.Color("#111") },
+      uColor: { value: new THREE.Color(tlColor) },
       uOpacity: { value: 0.7 },
       uFadeRange: { value: viewport.width / 2 },
     },
     vertexShader: timelineLineVert,
     fragmentShader: timelineLineFrag,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), []);
+  }), [tlColor]);
 
   const timelineNodes = useMemo(() => {
     if (!isLifeChannel) return [];
@@ -507,12 +547,12 @@ export function SceneContent({ entries, onSelect }: { entries: GalleryEntry[], o
             <group key={i} position={[node.position[0], node.position[1] + tlOffY, node.position[2]]}>
               <mesh frustumCulled={false}>
                 <circleGeometry args={[metrics.timelineDotRadius, 32]} />
-                <meshBasicMaterial color="#111" />
+                <meshBasicMaterial color={tlColor} />
               </mesh>
               <Text
                 position={[0, metrics.timelineLabelOffsetY, 0.01]}
-                fontSize={viewport.height * 0.012}
-                color="#111"
+                fontSize={viewport.height * (metrics.isMobile ? 0.01 : 0.012)}
+                color={tlColor}
                 anchorX="center"
                 anchorY="middle"
                 letterSpacing={0.15}
