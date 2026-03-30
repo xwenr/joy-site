@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense, useEffect, useMemo } from "react";
+import { useState, Suspense, useEffect, useMemo, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
 import { ScrollControls } from "@react-three/drei";
 import { AnimatePresence } from "framer-motion";
@@ -42,10 +42,26 @@ interface HomeClientProps {
 export default function HomeClient({ entries }: HomeClientProps) {
   const [selected, setSelected] = useState<GalleryEntry | null>(null);
   const [activeFilter, setActiveFilter] = useState<"all" | "life" | "archive">("all");
+  const [archiveSubFilter, setArchiveSubFilter] = useState<"all" | "album" | "song" | "film" | "book">("all");
+  const [lifeYearFilter, setLifeYearFilter] = useState<"all" | string>("all");
   const [showLoader, setShowLoader] = useState(false);
   const isMobile = useIsMobile();
 
   const bgColor = useThemeColor("--color-bg-canvas", "#f4f4f0");
+
+  const lifeYears = useMemo(() => {
+    const years = new Set<string>();
+    entries.forEach((e) => {
+      if (e.channel === "life" && e.date) years.add(e.date.slice(0, 4));
+    });
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [entries]);
+
+  const handleFilterChange = useCallback((filter: "all" | "life" | "archive") => {
+    setActiveFilter(filter);
+    if (filter !== "archive") setArchiveSubFilter("all");
+    if (filter !== "life") setLifeYearFilter("all");
+  }, []);
 
   useEffect(() => {
     if (entries.length === 0) {
@@ -62,13 +78,22 @@ export default function HomeClient({ entries }: HomeClientProps) {
   }, [entries.length]);
 
   const filteredEntries = useMemo(() => {
-    if (activeFilter === "all") return entries;
-    return entries.filter(entry => entry.channel === activeFilter);
-  }, [entries, activeFilter]);
+    let result = entries;
+    if (activeFilter !== "all") {
+      result = result.filter(entry => entry.channel === activeFilter);
+    }
+    if (activeFilter === "archive" && archiveSubFilter !== "all") {
+      result = result.filter(entry => entry.archiveType === archiveSubFilter);
+    }
+    if (activeFilter === "life" && lifeYearFilter !== "all") {
+      result = result.filter(entry => entry.date.startsWith(lifeYearFilter));
+    }
+    return result;
+  }, [entries, activeFilter, archiveSubFilter, lifeYearFilter]);
 
   return (
     <main className="fixed inset-0 w-full h-full bg-bg overflow-hidden font-sans">
-      <div className="absolute top-0 left-0 w-full px-5 pt-3 md:p-8 z-10 pointer-events-none flex justify-between items-center mix-blend-difference text-white md:items-start">
+      <div className="absolute top-0 left-0 w-full px-5 pt-[max(0.75rem,env(safe-area-inset-top,0.75rem))] md:p-8 z-10 pointer-events-none flex justify-between items-center mix-blend-difference text-white md:items-start">
         <h1 className="text-[12px] md:text-xl font-medium tracking-[0.2em] uppercase">
           JOY&apos;S GALLERY
         </h1>
@@ -77,12 +102,12 @@ export default function HomeClient({ entries }: HomeClientProps) {
         </p>
       </div>
 
-      <div className="absolute top-8 md:top-8 left-5 md:left-1/2 md:-translate-x-1/2 z-20 pointer-events-auto mix-blend-difference text-white">
+      <div className="absolute top-[calc(max(0.75rem,env(safe-area-inset-top,0.75rem))+1.25rem)] md:top-8 left-5 md:left-1/2 md:-translate-x-1/2 z-20 pointer-events-auto mix-blend-difference text-white">
         <nav className="flex items-center gap-5 md:gap-12 text-[10px] md:text-[11px] tracking-[0.15em] md:tracking-[0.2em] uppercase font-medium">
           {(["all", "life", "archive"] as const).map((filter) => (
             <button
               key={filter}
-              onClick={() => setActiveFilter(filter)}
+              onClick={() => handleFilterChange(filter)}
               className={`transition-opacity duration-300 hover:opacity-100 relative py-2 ${activeFilter === filter ? "opacity-100" : "opacity-40"}`}
             >
               {filter === "all" ? "Home" : filter === "life" ? "Life" : "Archive"}
@@ -92,6 +117,59 @@ export default function HomeClient({ entries }: HomeClientProps) {
             </button>
           ))}
         </nav>
+
+        {activeFilter === "archive" && (
+            <nav
+              className="mt-3 md:mt-4 overflow-x-auto scrollbar-hide max-w-[60vw] md:max-w-none"
+              style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
+            >
+              <div className="flex items-center gap-4 md:gap-8 text-[9px] md:text-[10px] tracking-[0.12em] md:tracking-[0.18em] uppercase font-normal whitespace-nowrap">
+                {(["all", "album", "song", "film", "book"] as const).map((sub) => (
+                  <button
+                    key={sub}
+                    onClick={() => setArchiveSubFilter(sub)}
+                    className={`transition-opacity duration-300 hover:opacity-100 relative py-1 flex-shrink-0 ${archiveSubFilter === sub ? "opacity-90" : "opacity-35"}`}
+                  >
+                    {sub === "all" ? "All" : sub}
+                    {archiveSubFilter === sub && (
+                      <motion.div layoutId="sub-indicator" className="absolute -bottom-0.5 left-0 right-0 h-[0.5px] bg-white" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </nav>
+          )}
+
+          {activeFilter === "life" && lifeYears.length > 0 && (
+            <nav
+              className="mt-3 md:mt-4 overflow-x-auto scrollbar-hide max-w-[60vw] md:max-w-none"
+              style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
+            >
+              <div className="flex items-center gap-4 md:gap-8 text-[9px] md:text-[10px] tracking-[0.12em] md:tracking-[0.18em] uppercase font-normal whitespace-nowrap">
+                <button
+                  onClick={() => setLifeYearFilter("all")}
+                  className={`transition-opacity duration-300 hover:opacity-100 relative py-1 flex-shrink-0 ${lifeYearFilter === "all" ? "opacity-90" : "opacity-35"}`}
+                >
+                  All
+                  {lifeYearFilter === "all" && (
+                    <motion.div layoutId="life-sub-indicator" className="absolute -bottom-0.5 left-0 right-0 h-[0.5px] bg-white" />
+                  )}
+                </button>
+                {lifeYears.map((year) => (
+                  <button
+                    key={year}
+                    onClick={() => setLifeYearFilter(year)}
+                    className={`transition-opacity duration-300 hover:opacity-100 relative py-1 flex-shrink-0 ${lifeYearFilter === year ? "opacity-90" : "opacity-35"}`}
+                  >
+                    {year}
+                    {lifeYearFilter === year && (
+                      <motion.div layoutId="life-sub-indicator" className="absolute -bottom-0.5 left-0 right-0 h-[0.5px] bg-white" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </nav>
+          )}
       </div>
 
       {entries.length === 0 ? (

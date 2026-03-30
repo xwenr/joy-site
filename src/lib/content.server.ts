@@ -5,6 +5,7 @@ import {
   type GalleryEntry,
   toGalleryEntry,
 } from "@/lib/content-types";
+import { getFeishuEntries } from "@/lib/feishu";
 
 const CONTENT_ROOT = path.join(process.cwd(), "content");
 const PUBLIC_ROOT = path.join(process.cwd(), "public");
@@ -87,17 +88,22 @@ async function readChannelEntries(
 }
 
 export async function getGalleryEntries(): Promise<GalleryEntry[]> {
-  const [lifeEntries, archiveEntries] = await Promise.all([
+  const [lifeEntries, archiveEntries, feishuEntries] = await Promise.all([
     readChannelEntries("life"),
     readChannelEntries("archive"),
+    getFeishuEntries(),
   ]);
 
-  const normalizedEntries = await Promise.all(
+  const localNormalized = await Promise.all(
     [...lifeEntries, ...archiveEntries].map((entry) => normalizeEntryAssets(entry)),
   );
+  const localEntries = localNormalized.filter(
+    (entry): entry is ContentEntry => Boolean(entry),
+  );
 
-  return normalizedEntries
-    .filter((entry): entry is ContentEntry => Boolean(entry))
+  const allEntries = [...localEntries, ...feishuEntries];
+
+  return allEntries
     .sort((a, b) => b.date.localeCompare(a.date))
     .map(toGalleryEntry);
 }

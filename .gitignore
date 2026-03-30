@@ -1,3 +1,6 @@
 node_modules
 .next
+out
 *.tsbuildinfo
+.env.local
+public/images/feishu/

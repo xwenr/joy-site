@@ -143,9 +143,9 @@ function useLayoutMetrics(viewport: { width: number; height: number }): LayoutMe
         y: baseUnit * (isMobile ? 0.08 : 0.3),
         z: -0.05,
       },
-      cardHeightRatio: isMobile ? 0.34 : 0.42,
+      cardHeightRatio: isMobile ? 0.34 : isCompact ? 0.38 : 0.42,
       hoverPullout: isCompact ? 0 : baseUnit * 0.75,
-      startOffsetY: isMobile ? -vh * 0.12 : 0,
+      startOffsetY: isMobile ? -vh * 0.12 : -vh * 0.06,
       timelineOffsetY: vh * (isMobile ? 0.42 : 0.37),
       timelineDotRadius: vh * 0.004,
       timelineLabelOffsetY: vh * 0.02,
@@ -207,8 +207,12 @@ export function GlassCard({ entry, index, total, onSelect, metrics }: GlassCardP
     ? textureImage.width / textureImage.height
     : 4 / 3;
 
-  const height = viewport.height * metrics.cardHeightRatio;
-  const width = height * imageAspect;
+  const maxDim = viewport.height * metrics.cardHeightRatio;
+  const rawHeight = maxDim;
+  const rawWidth = rawHeight * imageAspect;
+  const scale = Math.min(1, maxDim / rawWidth, maxDim / rawHeight);
+  const width = rawWidth * scale;
+  const height = rawHeight * scale;
   const skewY = -0.2;
 
   const thicknessOffsetX = width * 0.008;

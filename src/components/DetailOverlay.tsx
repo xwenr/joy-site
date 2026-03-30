@@ -36,13 +36,27 @@ function ImageGallery({ images, title }: { images: string[]; title: string }) {
     setActiveIdx(idx);
   };
 
+  const scrollTo = (idx: number) => {
+    if (!scrollRef.current) return;
+    const clamped = Math.max(0, Math.min(idx, images.length - 1));
+    scrollRef.current.scrollTo({
+      left: clamped * scrollRef.current.clientWidth,
+      behavior: "smooth",
+    });
+  };
+
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full h-full relative group">
       <div
         ref={scrollRef}
         onScroll={handleScroll}
         className="flex w-full h-full overflow-x-auto snap-x snap-mandatory scrollbar-hide"
-        style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
+        style={{
+          scrollbarWidth: "none",
+          WebkitOverflowScrolling: "touch",
+          touchAction: "manipulation",
+          overscrollBehaviorX: "contain",
+        }}
       >
         {images.map((src, i) => (
           <div key={i} className="w-full h-full flex-shrink-0 snap-center relative">
@@ -57,18 +71,44 @@ function ImageGallery({ images, title }: { images: string[]; title: string }) {
           </div>
         ))}
       </div>
-      {images.length > 1 && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
-          {images.map((_, i) => (
-            <div
-              key={i}
-              className={`w-1.5 h-1.5 rounded-full transition-opacity duration-300 ${
-                i === activeIdx ? "bg-white opacity-90" : "bg-white/40"
-              }`}
-            />
-          ))}
-        </div>
+
+      {activeIdx > 0 && (
+        <button
+          onClick={() => scrollTo(activeIdx - 1)}
+          aria-label="Previous image"
+          className="absolute left-2 md:left-3 top-1/2 -translate-y-1/2 w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm opacity-70 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 hover:bg-black/50 active:scale-90"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
       )}
+      {activeIdx < images.length - 1 && (
+        <button
+          onClick={() => scrollTo(activeIdx + 1)}
+          aria-label="Next image"
+          className="absolute right-2 md:right-3 top-1/2 -translate-y-1/2 w-9 h-9 md:w-10 md:h-10 flex items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm opacity-70 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 hover:bg-black/50 active:scale-90"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+      )}
+
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-3 md:gap-2">
+        {images.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => scrollTo(i)}
+            aria-label={`Go to image ${i + 1}`}
+            className={`w-2 h-2 rounded-full transition-all duration-300 p-1.5 md:p-0 box-content ${
+              i === activeIdx
+                ? "bg-white scale-100"
+                : "bg-white/40 scale-75 hover:bg-white/60"
+            }`}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -79,19 +119,19 @@ export default function DetailOverlay({ entry, onClose }: DetailOverlayProps) {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex bg-bg overflow-y-auto"
+      className="fixed inset-0 z-50 bg-bg overflow-y-auto"
       initial={{ opacity: 0, y: "100%" }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: "100%" }}
       transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className="min-h-screen w-full flex flex-col md:flex-row">
-        <div className="w-full md:w-1/2 h-[45vh] sm:h-[50vh] md:h-screen relative md:sticky md:top-0">
+      <div className="w-full flex flex-col md:flex-row md:min-h-screen">
+        <div className="w-full md:w-1/2 h-[45vh] sm:h-[50vh] md:h-screen relative md:sticky md:top-0 flex-shrink-0">
           <ImageGallery images={allImages} title={entry.title} />
         </div>
 
-        <div className="w-full md:w-1/2 min-h-[55vh] md:min-h-screen flex flex-col justify-center px-6 sm:px-8 md:px-20 py-12 md:py-20 bg-bg">
-          <div className="max-w-xl">
+        <div className="w-full md:w-1/2 flex flex-col justify-start md:justify-center px-6 sm:px-10 md:px-20 py-10 sm:py-12 md:py-20 pb-[max(2.5rem,env(safe-area-inset-bottom,2.5rem))] bg-bg">
+          <div className="max-w-xl mx-auto md:mx-0">
             <motion.p
               className="text-[10px] md:text-[11px] tracking-[0.2em] uppercase text-muted mb-6 md:mb-8"
               initial={{ opacity: 0, y: 20 }}
