@@ -162,7 +162,7 @@ async function downloadImage(
     return "";
   }
 
-  let buffer = Buffer.from(await res.arrayBuffer());
+  let buffer: Buffer = Buffer.from(await res.arrayBuffer());
 
   if (isHeic) {
     try {
