@@ -4,3 +4,5 @@ out
 *.tsbuildinfo
 .env.local
 public/images/feishu/
+
+.vercel
